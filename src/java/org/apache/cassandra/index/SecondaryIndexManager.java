@@ -65,6 +65,7 @@ import org.apache.commons.lang3.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import org.apache.cassandra.concurrent.DebuggableThreadPoolExecutor;
 import org.apache.cassandra.concurrent.JMXEnabledThreadPoolExecutor;
 import org.apache.cassandra.concurrent.NamedThreadFactory;
 import org.apache.cassandra.concurrent.Stage;
@@ -191,7 +192,7 @@ public class SecondaryIndexManager implements IndexRegistry, INotificationConsum
     // store per-endpoint index status: the key of inner map is identifier "keyspace.index"
     public static final Map<InetAddressAndPort, Map<String, Index.Status>> peerIndexStatus = new ConcurrentHashMap<>();
     // executes index status propagation task asynchronously to avoid potential deadlock on SIM
-    private static final ExecutorService statusPropagationExecutor = Executors.newSingleThreadExecutor();
+    private static final ExecutorService statusPropagationExecutor = DebuggableThreadPoolExecutor.createWithFixedPoolSize("IndexStatusPropagation", 1);
 
     /**
      * All registered indexes.

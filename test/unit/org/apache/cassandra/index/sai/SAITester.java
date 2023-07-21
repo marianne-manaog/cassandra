@@ -285,7 +285,7 @@ public class SAITester extends CQLTester
         }
     }
 
-    protected void waitForAssert(Runnable runnableAssert, long timeout, TimeUnit unit)
+    public static void waitForAssert(Runnable runnableAssert, long timeout, TimeUnit unit)
     {
         Awaitility.await().dontCatchUncaughtExceptions().atMost(timeout, unit).untilAsserted(runnableAssert::run);
     }
@@ -306,7 +306,7 @@ public class SAITester extends CQLTester
         return isIndexQueryable(KEYSPACE, currentTable());
     }
 
-    protected boolean isIndexQueryable(String keyspace, String table)
+    public static boolean isIndexQueryable(String keyspace, String table)
     {
         ColumnFamilyStore cfs = Keyspace.open(keyspace).getColumnFamilyStore(table);
         for (Index index : cfs.indexManager.listIndexes())
@@ -375,7 +375,7 @@ public class SAITester extends CQLTester
         waitForIndexQueryable(KEYSPACE, currentTable());
     }
 
-    public void waitForIndexQueryable(String keyspace, String table)
+    public static void waitForIndexQueryable(String keyspace, String table)
     {
         waitForAssert(() -> assertTrue(isIndexQueryable(keyspace, table)), 60, TimeUnit.SECONDS);
     }
