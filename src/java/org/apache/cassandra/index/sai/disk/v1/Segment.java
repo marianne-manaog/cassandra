@@ -57,7 +57,7 @@ public class Segment implements Closeable, SegmentOrdering
     // per-segment
     public final SegmentMetadata metadata;
 
-    private final IndexSearcher index;
+    public final IndexSearcher index;
 
     public Segment(IndexContext indexContext, SSTableContext sstableContext, PerIndexFiles indexFiles, SegmentMetadata metadata) throws IOException
     {

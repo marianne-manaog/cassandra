@@ -183,7 +183,12 @@ public class VectorMemtableIndexTest extends SAITester
         return VectorType.getInstance(FloatType.instance, dimensionCount).getSerializer().serialize(rawVector);
     }
 
-    private AbstractBounds<PartitionPosition> generateRandomBounds(List<DecoratedKey> keys)
+    public AbstractBounds<PartitionPosition> generateRandomBounds(List<DecoratedKey> keys)
+    {
+        return generateRandomBounds(partitioner, keys);
+    }
+
+    public static AbstractBounds<PartitionPosition> generateRandomBounds(IPartitioner partitioner, List<DecoratedKey> keys)
     {
         PartitionPosition leftBound = getRandom().nextBoolean() ? partitioner.getMinimumToken().minKeyBound()
                                                                 : keys.get(getRandom().nextIntBetween(0, keys.size() - 1)).getToken().minKeyBound();

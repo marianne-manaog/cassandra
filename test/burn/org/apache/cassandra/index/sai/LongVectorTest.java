@@ -198,7 +198,7 @@ public class LongVectorTest extends SAITester
     }
 
     /** @return a normalized vector with the given dimension */
-    private static Vector<Float> randomVector(int dimension)
+    public static Vector<Float> randomVector(int dimension)
     {
         var R = ThreadLocalRandom.current();
 
