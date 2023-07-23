@@ -25,6 +25,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
+import org.junit.BeforeClass;
 import org.junit.Test;
 
 import org.apache.cassandra.config.CassandraRelevantProperties;
@@ -34,6 +35,9 @@ import org.apache.cassandra.dht.IPartitioner;
 import org.apache.cassandra.dht.Murmur3Partitioner;
 import org.apache.cassandra.dht.Token;
 import org.apache.cassandra.exceptions.InvalidRequestException;
+import org.apache.cassandra.service.ClientState;
+import org.apache.cassandra.tracing.Tracing;
+import org.apache.cassandra.tracing.TracingTestImpl;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -42,24 +46,12 @@ public class VectorTypeTest extends VectorTester
 {
     private static final IPartitioner partitioner = Murmur3Partitioner.instance;
 
-    @Test
-    public void emptyIndexTest() throws Throwable
+    @BeforeClass
+    public static void setupClass()
     {
-        createTable("CREATE TABLE %s (pk int, str_val text, val vector<float, 3>, PRIMARY KEY(pk))");
-        createIndex("CREATE CUSTOM INDEX ON %s(val) USING 'StorageAttachedIndex'");
-        waitForIndexQueryable();
-
-        execute("INSERT INTO %s (pk, str_val) VALUES (0, 'A')");
-
-        UntypedResultSet result = execute("SELECT * FROM %s ORDER BY val ann of [2.5, 3.5, 4.5] LIMIT 3");
-        assertThat(result).hasSize(1);
-
-        flush();
-
-        result = execute("SELECT * FROM %s ORDER BY val ann of [2.5, 3.5, 4.5] LIMIT 3");
-        assertThat(result).hasSize(1);
+        System.setProperty("cassandra.custom_tracing_class", "org.apache.cassandra.tracing.TracingTestImpl");
     }
-
+    
     @Test
     public void endToEndTest() throws Throwable
     {
@@ -103,6 +95,48 @@ public class VectorTypeTest extends VectorTester
         assertContainsInt(result, "pk", 2);
     }
 
+    @Test
+    public void tracingTest() throws Throwable
+    {
+        createTable("CREATE TABLE %s (pk int, str_val text, val vector<float, 3>, PRIMARY KEY(pk))");
+        createIndex("CREATE CUSTOM INDEX ON %s(val) USING 'StorageAttachedIndex'");
+        waitForIndexQueryable();
+
+        execute("INSERT INTO %s (pk, str_val, val) VALUES (0, 'A', [1.0, 2.0, 3.0])");
+        execute("INSERT INTO %s (pk, str_val, val) VALUES (1, 'B', [2.0, 3.0, 4.0])");
+        execute("INSERT INTO %s (pk, str_val, val) VALUES (2, 'C', [3.0, 4.0, 5.0])");
+        execute("INSERT INTO %s (pk, str_val, val) VALUES (3, 'D', [4.0, 5.0, 6.0])");
+
+        flush();
+
+        execute("INSERT INTO %s (pk, str_val, val) VALUES (4, 'E', [5.0, 2.0, 3.0])");
+
+        Tracing.instance.newSession(ClientState.forInternalCalls(), Tracing.TraceType.QUERY);
+        execute("SELECT * FROM %s ORDER BY val ann of [9.5, 5.5, 6.5] LIMIT 5");
+        for (String trace : ((TracingTestImpl) Tracing.instance).getTraces())
+            assertThat(trace).doesNotContain("Executing single-partition query");
+        // manual inspection to verify that no extra traces were included
+        logger.info(((TracingTestImpl) Tracing.instance).getTraces().toString());
+    }
+
+    @Test
+    public void createIndexAfterInsertTest() throws Throwable
+    {
+        createTable("CREATE TABLE %s (pk int, str_val text, val vector<float, 3>, PRIMARY KEY(pk))");
+
+        execute("INSERT INTO %s (pk, str_val, val) VALUES (0, 'A', [1.0, 2.0, 3.0])");
+        execute("INSERT INTO %s (pk, str_val, val) VALUES (1, 'B', [2.0, 3.0, 4.0])");
+        execute("INSERT INTO %s (pk, str_val, val) VALUES (2, 'C', [3.0, 4.0, 5.0])");
+        execute("INSERT INTO %s (pk, str_val, val) VALUES (3, 'D', [4.0, 5.0, 6.0])");
+
+        flush();
+        createIndex("CREATE CUSTOM INDEX ON %s(val) USING 'StorageAttachedIndex'");
+        waitForIndexQueryable();
+
+        UntypedResultSet result = execute("SELECT * FROM %s ORDER BY val ann of [2.5, 3.5, 4.5] LIMIT 3");
+        assertThat(result).hasSize(3);
+    }
+
     public static void assertContainsInt(UntypedResultSet result, String columnName, int columnValue)
     {
         for (UntypedResultSet.Row row : result)
@@ -134,6 +168,28 @@ public class VectorTypeTest extends VectorTester
         // the vector given is closest to row 2, but we exclude that row because b=false
         var result = execute("SELECT * FROM %s WHERE b=true ORDER BY v ANN OF [3.1, 4.1, 5.1] LIMIT 2");
         // VSTODO assert specific row keys
+        assertThat(result).hasSize(2);
+
+        flush();
+        compact();
+
+        result = execute("SELECT * FROM %s WHERE b=true ORDER BY v ANN OF [3.1, 4.1, 5.1] LIMIT 2");
+        assertThat(result).hasSize(2);
+    }
+
+    @Test
+    public void testTwoPredicatesManyRows() throws Throwable
+    {
+        createTable("CREATE TABLE %s (pk int, b boolean, v vector<float, 3>, PRIMARY KEY(pk))");
+        createIndex("CREATE CUSTOM INDEX ON %s(b) USING 'StorageAttachedIndex'");
+        createIndex("CREATE CUSTOM INDEX ON %s(v) USING 'StorageAttachedIndex'");
+        waitForIndexQueryable();
+
+        for (int i = 0; i < 100; i++)
+            execute("INSERT INTO %s (pk, b, v) VALUES (?, true, ?)",
+                    i, vector((float) i, (float) (i + 1), (float) (i + 2)));
+
+        var result = execute("SELECT * FROM %s WHERE b=true ORDER BY v ANN OF [3.1, 4.1, 5.1] LIMIT 2");
         assertThat(result).hasSize(2);
 
         flush();
@@ -354,6 +410,23 @@ public class VectorTypeTest extends VectorTester
         assertThat(result).hasSize(0);
 
         result = execute("SELECT * FROM %s WHERE str_val = 'A' ORDER BY val ann of [2.5, 3.5, 4.5] LIMIT 2");
+        assertThat(result).hasSize(1);
+    }
+
+    @Test
+    public void lwtTest() throws Throwable
+    {
+        createTable("CREATE TABLE %s (p int, c int, v text, vec vector<float, 2>, PRIMARY KEY(p, c))");
+        createIndex("CREATE CUSTOM INDEX ON %s(vec) USING 'StorageAttachedIndex'");
+        waitForIndexQueryable();
+
+        execute("INSERT INTO %s (p, c, v) VALUES (?, ?, ?)", 0, 0, "test");
+        execute("INSERT INTO %s (p, c, v) VALUES (?, ?, ?)", 0, 1, "00112233445566");
+
+        execute("UPDATE %s SET v='00112233', vec=[0.9, 0.7] WHERE p = 0 AND c = 0 IF v = 'test'");
+
+        UntypedResultSet result = execute("SELECT * FROM %s ORDER BY vec ANN OF [0.1, 0.9] LIMIT 100");
+
         assertThat(result).hasSize(1);
     }
 

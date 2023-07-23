@@ -38,6 +38,7 @@ import org.slf4j.LoggerFactory;
 import org.apache.cassandra.db.Clustering;
 import org.apache.cassandra.db.DecoratedKey;
 import org.apache.cassandra.db.PartitionPosition;
+import org.apache.cassandra.db.marshal.VectorType;
 import org.apache.cassandra.db.memtable.Memtable;
 import org.apache.cassandra.dht.AbstractBounds;
 import org.apache.cassandra.index.sai.IndexContext;
@@ -92,14 +93,7 @@ public class VectorMemtableIndex implements MemtableIndex
         if (value == null || value.remaining() == 0)
             return 0;
 
-        if (minimumKey == null)
-            minimumKey = primaryKey;
-        else if (primaryKey.compareTo(minimumKey) < 0)
-            minimumKey = primaryKey;
-        if (maximumKey == null)
-            maximumKey = primaryKey;
-        else if (primaryKey.compareTo(maximumKey) > 0)
-            maximumKey = primaryKey;
+        updateKeyBounds(primaryKey);
 
         writeCount.increment();
         primaryKeys.add(primaryKey);
@@ -128,6 +122,10 @@ public class VectorMemtableIndex implements MemtableIndex
         if (different)
         {
             var primaryKey = indexContext.keyFactory().create(key, clustering);
+            // update bounds because only rows with vectors are included in the key bounds,
+            // so if the vector was null before, we won't have included it
+            updateKeyBounds(primaryKey);
+
             // make the changes in this order so we don't have a window where the row is not in the index at all
             if (newRemaining > 0)
                 graph.add(newValue, primaryKey, FAIL);
@@ -138,6 +136,17 @@ public class VectorMemtableIndex implements MemtableIndex
             if (newRemaining <= 0 && oldRemaining > 0)
                 primaryKeys.remove(primaryKey);
         }
+    }
+
+    private void updateKeyBounds(PrimaryKey primaryKey) {
+        if (minimumKey == null)
+            minimumKey = primaryKey;
+        else if (primaryKey.compareTo(minimumKey) < 0)
+            minimumKey = primaryKey;
+        if (maximumKey == null)
+            maximumKey = primaryKey;
+        else if (primaryKey.compareTo(maximumKey) > 0)
+            maximumKey = primaryKey;
     }
 
     @Override
@@ -206,7 +215,7 @@ public class VectorMemtableIndex implements MemtableIndex
         }
 
         ByteBuffer buffer = exp.lower.value.raw;
-        float[] qv = (float[])indexContext.getValidator().getSerializer().deserialize(buffer.duplicate());
+        float[] qv = TypeUtil.decomposeVector(indexContext, buffer);
         var bits = new KeyFilteringBits(results);
         var keyQueue = graph.search(qv, limit, bits, Integer.MAX_VALUE);
         if (keyQueue.isEmpty())
@@ -217,7 +226,8 @@ public class VectorMemtableIndex implements MemtableIndex
     @Override
     public Iterator<Pair<ByteComparable, Iterator<PrimaryKey>>> iterator(DecoratedKey min, DecoratedKey max)
     {
-        // REVIEWME where would we need this?
+        // This method is only used when merging an in-memory index with a RowMapping. This is done a different
+        // way with the graph using the writeData method below.
         throw new UnsupportedOperationException();
     }
 
