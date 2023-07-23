@@ -239,8 +239,7 @@ public class VectorIndexSearcher extends IndexSearcher implements SegmentOrderin
         }
 
         // else ask hnsw to perform a search limited to the bits we created
-        ByteBuffer buffer = exp.lower.value.raw;
-        float[] queryVector = type.getSerializer().deserializeFloatArray(buffer);
+        float[] queryVector = exp.lower.value.vector;
         var results = graph.search(queryVector, limit, bits, Integer.MAX_VALUE, context.queryContext);
         return toPrimaryKeyIterator(results, context);
     }
