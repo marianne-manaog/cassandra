@@ -317,7 +317,12 @@ public class TypeUtil
 
     public static float[] decomposeVector(AbstractType<?> type, ByteBuffer byteBuffer)
     {
-        return ((VectorType.VectorSerializer)type.getSerializer()).deserializeFloatArray(byteBuffer);
+        return ((VectorType<?>.VectorSerializer)type.getSerializer()).deserializeFloatArray(byteBuffer);
+    }
+
+    public static float[] decomposeVector(IndexContext indexContext, ByteBuffer byteBuffer)
+    {
+        return decomposeVector(indexContext.getValidator(), byteBuffer);
     }
 
     private static ByteBuffer cellValue(ColumnMetadata column, IndexTarget.Type indexType, Cell cell)
