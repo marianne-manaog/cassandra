@@ -182,7 +182,7 @@ public class StorageAttachedIndex implements Index
     private final IndexMetadata config;
     private final IndexContext indexContext;
 
-    // Tracks whether we've started the index build on initialization.
+    // Tracks whether or not we've started the index build on initialization.
     private volatile boolean initBuildStarted = false;
 
     // Tracks whether the index has been invalidated due to removal, a table drop, etc.
@@ -543,14 +543,15 @@ public class StorageAttachedIndex implements Index
         SingleColumnRestriction.AnnRestriction annRestriction = (SingleColumnRestriction.AnnRestriction) restriction;
         VectorSimilarityFunction function = indexContext.getIndexWriterConfig().getSimilarityFunction();
 
-        ByteBuffer targetBuf = annRestriction.value(options).duplicate();
-        float[] target = targetBuf.asFloatBuffer().array();
+        AbstractType<?> validatorIndexContext = indexContext.getValidator();
+        
+        float[] target = TypeUtil.decomposeVector(validatorIndexContext, annRestriction.value(options).duplicate());
 
         return (leftBuf, rightBuf) -> {
-            float[] left = leftBuf.get(columnIndex).duplicate().asFloatBuffer().array();
+            float[] left = TypeUtil.decomposeVector(validatorIndexContext, leftBuf.get(columnIndex).duplicate());
             double scoreLeft = function.compare(left, target);
 
-            float[] right = rightBuf.get(columnIndex).duplicate().asFloatBuffer().array();
+            float[] right = TypeUtil.decomposeVector(validatorIndexContext, rightBuf.get(columnIndex).duplicate());
             double scoreRight = function.compare(right, target);
             return Double.compare(scoreRight, scoreLeft); // descending order
         };
