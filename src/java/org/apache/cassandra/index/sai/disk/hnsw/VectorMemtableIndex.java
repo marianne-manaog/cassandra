@@ -204,8 +204,7 @@ public class VectorMemtableIndex implements MemtableIndex
             return new ReorderingRangeIterator(new PriorityQueue<>(results));
         }
 
-        ByteBuffer buffer = exp.lower.value.raw;
-        float[] qv = (float[])indexContext.getValidator().getSerializer().deserialize(buffer.duplicate());
+        float[] qv = exp.lower.value.vector;
         var bits = new KeyFilteringBits(results);
         var keyQueue = graph.search(qv, limit, bits, Integer.MAX_VALUE);
         if (keyQueue.isEmpty())
