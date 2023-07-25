@@ -39,7 +39,6 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Future;
 import java.util.function.BooleanSupplier;
 import java.util.stream.Collectors;
-import java.util.stream.IntStream;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
@@ -542,38 +541,25 @@ public class StorageAttachedIndex implements Index
         Preconditions.checkState(indexContext.isVector());
 
         SingleColumnRestriction.AnnRestriction annRestriction = (SingleColumnRestriction.AnnRestriction) restriction;
-        VectorSimilarityFunction similarityFunction = indexContext.getIndexWriterConfig().getSimilarityFunction();
+        VectorSimilarityFunction function = indexContext.getIndexWriterConfig().getSimilarityFunction();
 
-        AbstractType<?> validatorIndexContext = indexContext.getValidator();
+        float[] target = TypeUtil.decomposeVector(indexContext, annRestriction.value(options).duplicate());
 
-        float[] targetVector = TypeUtil.decomposeVector(validatorIndexContext, annRestriction.value(options).duplicate());
+        Map<ByteBuffer, Double> scoreMap = new HashMap<>();
+        for (List<ByteBuffer> row : cqlRows)
+        {
+            ByteBuffer vectorBuffer = row.get(columnIndex);
+            float[] vector = TypeUtil.decomposeVector(indexContext, vectorBuffer.duplicate());
+            double score = function.compare(vector, target);
+            scoreMap.put(vectorBuffer.duplicate(), score);
+        }
 
-        List<float[]> listQueryVectors = cqlRows.stream()
-                                                .flatMap(row -> row.stream().map(cqlRowBuff -> TypeUtil.decomposeVector(indexContext, cqlRowBuff)))
-                                                .collect(Collectors.toList());
-
-        List<Double> listSimilarityScores = listQueryVectors.stream()
-                                                            .mapToDouble(deserializedVector -> similarityFunction.compare(deserializedVector, targetVector))
-                                                            .boxed()
-                                                            .collect(Collectors.toList());
-
-        TreeMap<float[], Double> sortedVectorScoresMap = IntStream.range(0, listQueryVectors.size())
-                                                                  .boxed()
-                                                                  .collect(Collectors.toMap(
-                                                                  i -> listQueryVectors.get(i),
-                                                                  i -> listSimilarityScores.get(i),
-                                                                  (score1, score2) -> score1,
-                                                                  TreeMap::new
-                                                                  ));
-
-        return (leftBuf, rightBuf) -> {
-            float[] leftVector = listQueryVectors.get(columnIndex);
-            float[] rightVector = listQueryVectors.get(columnIndex);
-
-            double scoreLeft = sortedVectorScoresMap.get(leftVector);
-            double scoreRight = sortedVectorScoresMap.get(rightVector);
-            return Double.compare(scoreRight, scoreLeft); // descending order
+        return (leftRow, rightRow) -> {
+            Double leftScore = scoreMap.get(leftRow.get(columnIndex));
+            Double rightScore = scoreMap.get(rightRow.get(columnIndex));
+            return Double.compare(rightScore, leftScore);
         };
+
     }
 
     @Override
