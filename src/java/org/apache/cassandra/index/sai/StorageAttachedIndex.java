@@ -534,7 +534,8 @@ public class StorageAttachedIndex implements Index
     }
 
     @Override
-    public Comparator<List<ByteBuffer>> getPostQueryOrdering(Restriction restriction, int columnIndex, QueryOptions options, List<List<ByteBuffer>> cqlRows) {
+    public Comparator<List<ByteBuffer>> getPostQueryOrdering(Restriction restriction, int columnIndex, QueryOptions options, List<List<ByteBuffer>> cqlRows)
+    {
         // For now, only support ANN
         assert restriction instanceof SingleColumnRestriction.AnnRestriction;
 
@@ -547,31 +548,27 @@ public class StorageAttachedIndex implements Index
 
         float[] targetVector = TypeUtil.decomposeVector(validatorIndexContext, annRestriction.value(options).duplicate());
 
-        List<List<ByteBuffer>> listQueryVectors = cqlRows; // We use cqlRows directly as a list of ByteBuffer lists
+        List<float[]> listQueryVectors = cqlRows.stream()
+                                                .flatMap(row -> row.stream().map(cqlRowBuff -> TypeUtil.decomposeVector(indexContext, cqlRowBuff)))
+                                                .collect(Collectors.toList());
 
         List<Double> listSimilarityScores = listQueryVectors.stream()
-                                                            .map(queryVector -> {
-                                                                float[] deserializedVector = queryVector.stream()
-                                                                                                        .map(cqlRowBuff -> TypeUtil.decomposeVector(indexContext, cqlRowBuff))
-                                                                                                        .findFirst()
-                                                                                                        .orElseThrow(IllegalArgumentException::new);
-                                                                return similarityFunction.compare(deserializedVector, targetVector);
-                                                            })
+                                                            .mapToDouble(deserializedVector -> similarityFunction.compare(deserializedVector, targetVector))
                                                             .boxed()
                                                             .collect(Collectors.toList());
 
-        TreeMap<List<ByteBuffer>, Double> sortedVectorScoresMap = IntStream.range(0, listQueryVectors.size())
-                                                                           .boxed()
-                                                                           .collect(Collectors.toMap(
-                                                                           i -> listQueryVectors.get(i),
-                                                                           i -> listSimilarityScores.get(i),
-                                                                           (score1, score2) -> score1,
-                                                                           TreeMap::new
-                                                                           ));
+        TreeMap<float[], Double> sortedVectorScoresMap = IntStream.range(0, listQueryVectors.size())
+                                                                  .boxed()
+                                                                  .collect(Collectors.toMap(
+                                                                  i -> listQueryVectors.get(i),
+                                                                  i -> listSimilarityScores.get(i),
+                                                                  (score1, score2) -> score1,
+                                                                  TreeMap::new
+                                                                  ));
 
         return (leftBuf, rightBuf) -> {
-            List<ByteBuffer> leftVector = listQueryVectors.get(columnIndex);
-            List<ByteBuffer> rightVector = listQueryVectors.get(columnIndex);
+            float[] leftVector = listQueryVectors.get(columnIndex);
+            float[] rightVector = listQueryVectors.get(columnIndex);
 
             double scoreLeft = sortedVectorScoresMap.get(leftVector);
             double scoreRight = sortedVectorScoresMap.get(rightVector);
