@@ -424,9 +424,10 @@ public interface Index
      * @param restriction restriction that requires current index
      * @param columnIndex idx of the indexed column in returned row
      * @param options query options
+     * @param cqlRows list of lists of byte buffers based on the returned rows
      * @return comparator that for post-query ordering; or null if not supported
      */
-    default Comparator<List<ByteBuffer>> getPostQueryOrdering(Restriction restriction, int columnIndex, QueryOptions options)
+    default Comparator<List<ByteBuffer>> getPostQueryOrdering(Restriction restriction, int columnIndex, QueryOptions options, List<List<ByteBuffer>> cqlRows)
     {
         return null;
     }

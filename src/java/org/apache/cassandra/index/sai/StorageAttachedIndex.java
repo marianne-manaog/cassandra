@@ -39,6 +39,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Future;
 import java.util.function.BooleanSupplier;
 import java.util.stream.Collectors;
+import java.util.stream.IntStream;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
@@ -533,7 +534,7 @@ public class StorageAttachedIndex implements Index
     }
 
     @Override
-    public Comparator<List<ByteBuffer>> getPostQueryOrdering(Restriction restriction, int columnIndex, QueryOptions options)
+    public Comparator<List<ByteBuffer>> getPostQueryOrdering(Restriction restriction, int columnIndex, QueryOptions options, List<List<ByteBuffer>> cqlRows)
     {
         // For now, only support ANN
         assert restriction instanceof SingleColumnRestriction.AnnRestriction;
@@ -541,18 +542,36 @@ public class StorageAttachedIndex implements Index
         Preconditions.checkState(indexContext.isVector());
 
         SingleColumnRestriction.AnnRestriction annRestriction = (SingleColumnRestriction.AnnRestriction) restriction;
-        VectorSimilarityFunction function = indexContext.getIndexWriterConfig().getSimilarityFunction();
+        VectorSimilarityFunction similarityFunction = indexContext.getIndexWriterConfig().getSimilarityFunction();
 
         AbstractType<?> validatorIndexContext = indexContext.getValidator();
-        
-        float[] target = TypeUtil.decomposeVector(validatorIndexContext, annRestriction.value(options).duplicate());
+
+        float[] targetVector = TypeUtil.decomposeVector(validatorIndexContext, annRestriction.value(options).duplicate());
+
+        List<float[]> listQueryVectors = cqlRows.stream()
+                                                .flatMap(row -> row.stream().map(cqlRowBuff -> TypeUtil.decomposeVector(indexContext, cqlRowBuff)))
+                                                .collect(Collectors.toList());
+
+        List<Double> listSimilarityScores = listQueryVectors.stream()
+                                                            .mapToDouble(deserializedVector -> similarityFunction.compare(deserializedVector, targetVector))
+                                                            .boxed()
+                                                            .collect(Collectors.toList());
+
+        TreeMap<float[], Double> sortedVectorScoresMap = IntStream.range(0, listQueryVectors.size())
+                                                                  .boxed()
+                                                                  .collect(Collectors.toMap(
+                                                                  i -> listQueryVectors.get(i),
+                                                                  i -> listSimilarityScores.get(i),
+                                                                  (score1, score2) -> score1,
+                                                                  TreeMap::new
+                                                                  ));
 
         return (leftBuf, rightBuf) -> {
-            float[] left = TypeUtil.decomposeVector(validatorIndexContext, leftBuf.get(columnIndex).duplicate());
-            double scoreLeft = function.compare(left, target);
+            float[] leftVector = listQueryVectors.get(columnIndex);
+            float[] rightVector = listQueryVectors.get(columnIndex);
 
-            float[] right = TypeUtil.decomposeVector(validatorIndexContext, rightBuf.get(columnIndex).duplicate());
-            double scoreRight = function.compare(right, target);
+            double scoreLeft = sortedVectorScoresMap.get(leftVector);
+            double scoreRight = sortedVectorScoresMap.get(rightVector);
             return Double.compare(scoreRight, scoreLeft); // descending order
         };
     }

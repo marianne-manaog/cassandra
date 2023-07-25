@@ -1022,9 +1022,10 @@ public class SelectStatement implements CQLStatement.SingleKeyspaceCqlStatement
         if (cqlRows.size() == 0 || !needsPostQueryOrdering())
             return;
 
-        Comparator<List<ByteBuffer>> comparator = orderingComparator.prepareFor(table, options);
+        List<List<ByteBuffer>> cqlRowsBuffers = cqlRows.rows;
+        Comparator<List<ByteBuffer>> comparator = orderingComparator.prepareFor(table, options, cqlRowsBuffers);
         if (comparator != null)
-            Collections.sort(cqlRows.rows, comparator);
+            Collections.sort(cqlRowsBuffers, comparator);
     }
 
     public static class RawStatement extends QualifiedStatement<SelectStatement>
@@ -1499,7 +1500,7 @@ public class SelectStatement implements CQLStatement.SingleKeyspaceCqlStatement
         /**
          * Produces a prepared {@link ColumnComparator} for current table and query-options
          */
-        public Comparator<T> prepareFor(TableMetadata table, QueryOptions options)
+        public Comparator<T> prepareFor(TableMetadata table, QueryOptions options, List<List<ByteBuffer>> rows)
         {
             return this;
         }
@@ -1559,11 +1560,11 @@ public class SelectStatement implements CQLStatement.SingleKeyspaceCqlStatement
         }
 
         @Override
-        public Comparator<List<ByteBuffer>> prepareFor(TableMetadata table, QueryOptions options)
+        public Comparator<List<ByteBuffer>> prepareFor(TableMetadata table, QueryOptions options, List<List<ByteBuffer>> cqlRows)
         {
             Index index = restriction.findSupportingIndex(IndexRegistry.obtain(table));
             assert index != null;
-            return index.getPostQueryOrdering(restriction, columnIndex, options);
+            return index.getPostQueryOrdering(restriction, columnIndex, options, cqlRows);
         }
 
         @Override
