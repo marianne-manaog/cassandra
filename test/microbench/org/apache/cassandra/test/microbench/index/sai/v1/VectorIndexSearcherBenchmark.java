@@ -44,12 +44,13 @@ import org.apache.cassandra.index.sai.SSTableContext;
 import org.apache.cassandra.index.sai.SSTableQueryContext;
 import org.apache.cassandra.index.sai.StorageAttachedIndex;
 import org.apache.cassandra.index.sai.StorageAttachedIndexGroup;
+import org.apache.cassandra.index.sai.disk.PostingList;
+import org.apache.cassandra.index.sai.disk.PrimaryKeyMap;
 import org.apache.cassandra.index.sai.disk.format.IndexDescriptor;
 import org.apache.cassandra.index.sai.disk.v1.IndexSearcher;
+import org.apache.cassandra.index.sai.disk.v1.SegmentMetadata;
 import org.apache.cassandra.index.sai.disk.v1.V1SearchableIndex;
 import org.apache.cassandra.index.sai.plan.Expression;
-import org.apache.cassandra.index.sai.utils.PrimaryKey;
-import org.apache.cassandra.index.sai.utils.RangeIterator;
 import org.apache.cassandra.index.sai.utils.SaiRandomizedTest;
 import org.apache.cassandra.io.sstable.format.SSTableReader;
 import org.apache.cassandra.schema.KeyspaceParams;
@@ -129,7 +130,7 @@ public class VectorIndexSearcherBenchmark extends SaiRandomizedTest
     public void doTestEqQueriesAgainstStringIndex() throws Exception
     {
         Expression expression = new Expression(indexContext).add(Operator.ANN, randomVectorBytes());
-        RangeIterator<PrimaryKey> results = searcher.search(expression, bounds, SSTableQueryContext.forTest(), false, 1);
+        PostingList results = searcher.searchPosting(SSTableQueryContext.forTest(), expression, bounds, 1);
     }
 
     @TearDown(Level.Trial)

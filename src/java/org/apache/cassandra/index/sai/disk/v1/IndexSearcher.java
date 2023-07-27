@@ -138,4 +138,6 @@ public abstract class IndexSearcher implements Closeable, SegmentOrdering
 
         return new SSTableRowIdsRangeIterator(indexContext, searcherContext);
     }
+
+    public abstract PostingList searchPosting(SSTableQueryContext context, Expression exp, AbstractBounds<PartitionPosition> keyRange, int limit) throws IOException;
 }
