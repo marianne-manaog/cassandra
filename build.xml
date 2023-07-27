@@ -586,8 +586,8 @@
           <dependency groupId="net.bytebuddy" artifactId="byte-buddy" version="${bytebuddy.version}" />
           <dependency groupId="net.bytebuddy" artifactId="byte-buddy-agent" version="${bytebuddy.version}" />
 
-          <dependency groupId="org.openjdk.jmh" artifactId="jmh-core" version="1.21" scope="test"/>
-          <dependency groupId="org.openjdk.jmh" artifactId="jmh-generator-annprocess" version="1.21" scope="test"/>
+          <dependency groupId="org.openjdk.jmh" artifactId="jmh-core" version="1.36" scope="test"/>
+          <dependency groupId="org.openjdk.jmh" artifactId="jmh-generator-annprocess" version="1.36" scope="test"/>
 
           <dependency groupId="org.apache.ant" artifactId="ant-junit" version="1.10.12" scope="test"/>
 
@@ -2104,6 +2104,8 @@
           <arg value="-v"/>
           <arg value="EXTRA"/>
           <jvmarg line="${java11-jvmargs}"/>
+          <arg value="-prof"/>
+          <arg value="async:libPath=/usr/local/lib/libasyncProfiler.dylib"/>
 
           <!-- Broken: ZeroCopyStreamingBench,MutationBench,FastThreadLocalBench  (FIXME) -->
           <arg value="-e"/><arg value="ZeroCopyStreamingBench|MutationBench|FastThreadLocalBench"/>
