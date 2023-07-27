@@ -93,6 +93,13 @@ public class KDTreeIndexSearcher extends IndexSearcher
         return toSSTableRowIdsIterator(postingList, context);
     }
 
+    // Interim placeholder method
+    @Override
+    public PostingList searchPosting(SSTableQueryContext context, Expression exp, AbstractBounds<PartitionPosition> keyRange, int limit) throws IOException
+    {
+        return null;
+    }
+
     private PostingList searchPosting(Expression exp, SSTableQueryContext context)
     {
         if (logger.isTraceEnabled())
