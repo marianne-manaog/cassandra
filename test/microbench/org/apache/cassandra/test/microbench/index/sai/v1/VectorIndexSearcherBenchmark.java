@@ -47,9 +47,7 @@ import org.apache.cassandra.index.sai.StorageAttachedIndexGroup;
 import org.apache.cassandra.index.sai.disk.PostingList;
 import org.apache.cassandra.index.sai.disk.format.IndexDescriptor;
 import org.apache.cassandra.index.sai.disk.v1.IndexSearcher;
-import org.apache.cassandra.index.sai.disk.v1.PerIndexFiles;
 import org.apache.cassandra.index.sai.disk.v1.V1SearchableIndex;
-import org.apache.cassandra.index.sai.disk.v1.VectorIndexSearcher;
 import org.apache.cassandra.index.sai.plan.Expression;
 import org.apache.cassandra.index.sai.utils.SaiRandomizedTest;
 import org.apache.cassandra.io.sstable.format.SSTableReader;
@@ -69,12 +67,10 @@ import org.openjdk.jmh.annotations.Warmup;
 
 import static org.apache.cassandra.index.sai.LongVectorTest.randomVector;
 import static org.apache.cassandra.index.sai.SAITester.waitForIndexQueryable;
-import static org.hamcrest.Matchers.instanceOf;
-import static org.hamcrest.Matchers.is;
 
 @Fork(1)
-@Warmup(time = 1, iterations = 1)
-@Measurement(time = 1, iterations = 2)
+@Warmup(time = 30, iterations = 5)
+@Measurement(time = 30, iterations = 5)
 @OutputTimeUnit(TimeUnit.SECONDS)
 @BenchmarkMode(Mode.Throughput)
 @State(Scope.Thread)
@@ -123,15 +119,7 @@ public class VectorIndexSearcherBenchmark extends SaiRandomizedTest
 
         bounds = AbstractBounds.bounds(reader.first, true, reader.last, true);
 
-        try (PerIndexFiles perIndexFiles = new PerIndexFiles(indexDescriptor, indexContext, false))
-        {
-            IndexSearcher searcher = IndexSearcher.open(ctx.primaryKeyMapFactory, perIndexFiles, searchableIndex.segments.get(0).metadata, indexDescriptor, indexContext);
-            assertThat(searcher, is(instanceOf(VectorIndexSearcher.class)));
-        }
-        catch (IOException e)
-        {
-            throw new RuntimeException(e);
-        }
+        searcher = searchableIndex.segments.get(0).index;
     }
 
     private ByteBuffer randomVectorBytes()
