@@ -79,6 +79,7 @@ public class VectorIndexSearcherBenchmark extends SaiRandomizedTest
     private static final String KEYSPACE = "ks";
     private static final String TABLE = "tab";
     private static final int DIMENSION = 16;
+    private static final int numSSTables = 2;
     private static final int N = 10_000;
     private IndexSearcher searcher;
     private IndexContext indexContext;
@@ -101,12 +102,16 @@ public class VectorIndexSearcherBenchmark extends SaiRandomizedTest
         waitForIndexQueryable(KEYSPACE, TABLE);
         var keys = IntStream.range(0, N).boxed().collect(Collectors.toList());
         Collections.shuffle(keys);
-        for (int i = 0; i < N; i++)
-        {
-            QueryProcessor.executeInternal(String.format("INSERT INTO %s.%s (key, value) VALUES (?, ?)", KEYSPACE, TABLE), i, randomVector(DIMENSION));
-        }
+
         ColumnFamilyStore cfs = ColumnFamilyStore.getIfExists(KEYSPACE, TABLE);
-        cfs.forceBlockingFlush(ColumnFamilyStore.FlushReason.UNIT_TESTS);
+        for (int i = 0; i < numSSTables ; i++)
+        {
+            for (int j = 0; j < N; j++)
+            {
+                QueryProcessor.executeInternal(String.format("INSERT INTO %s.%s (key, value) VALUES (?, ?)", KEYSPACE, TABLE), i, randomVector(DIMENSION));
+            }
+            cfs.forceBlockingFlush(ColumnFamilyStore.FlushReason.UNIT_TESTS);
+        }
 
         StorageAttachedIndex sai = (StorageAttachedIndex) cfs.getIndexManager().getIndexByName(String.format("%s_value_idx", TABLE));
         indexContext = sai.getIndexContext();
